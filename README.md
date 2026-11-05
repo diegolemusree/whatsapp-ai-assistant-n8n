@@ -75,7 +75,7 @@ The model must answer in this shape, and nothing else:
 ## Design decisions
 
 - **Configuration in data, not in code.** Hours, services, prices, FAQs and the owner's email live in Data Tables. A new business means a new row, not a new workflow.
-- **Per-client cost isolation.** Each client gets their own Anthropic workspace and API key, and their own BSP account, so usage and billing never mix.
+- **Per-client cost isolation.** By design, each client is set up with their own Anthropic workspace and API key and their own BSP account, so usage and billing never mix.
 - **Fail loudly.** Missing configuration, unexpected categories and node errors all reach the owner by email.
 - **Cheap, fast model for triage.** Classification and replies run on Claude Haiku. The JSON schema keeps its output predictable.
 
@@ -89,7 +89,7 @@ Python scripts I wrote to work with n8n through its REST API (standard library o
   - It reports crossings and overlaps, and renders a preview. The workflow map above comes from it.
 - [`tools/n8n_api.py`](tools/n8n_api.py) is a minimal API client: back up, inspect, create, update and activate workflows.
 
-On top of these, a private script clones the whole stack (triage, booking, web-chat entry, reminders) for a new business from shared configuration. Five branded demos (dental clinic, beauty salon, nail studio, tattoo studio, barbershop) were generated that way.
+On top of these, a private script clones the whole stack (triage, booking, web-chat entry, reminders) for a new business from shared configuration. Starting from the dental-clinic demo, it generated four more branded demos (beauty salon, nail studio, tattoo studio, barbershop).
 
 ## Stack
 
