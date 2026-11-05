@@ -1,0 +1,2669 @@
+{
+  "name": "WhatsApp AI Assistant · Triage (sanitized showcase)",
+  "nodes": [
+    {
+      "id": "d98296b6-0e8a-4923-a2f0-db6f8e09a5ab",
+      "name": "When chat message received",
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        384
+      ],
+      "parameters": {
+        "options": {}
+      }
+    },
+    {
+      "id": "c556f9d9-7755-4e8e-8a0c-9c39a80e6cd3",
+      "name": "Anthropic Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.6,
+      "position": [
+        7168,
+        192
+      ],
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "claude-haiku-4-5-20251001",
+          "mode": "list"
+        },
+        "options": {
+          "temperature": 0.1
+        }
+      }
+    },
+    {
+      "id": "90a2cd61-dacb-468e-9f56-76e7d8f44a43",
+      "name": "Clasificar Mensaje",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        7168,
+        0
+      ],
+      "parameters": {
+        "promptType": "define",
+        "text": "=[Redacted for the public showcase. Builds the user turn: the customer's (possibly merged) message, plus extra rules when the message comes from the website demo chat.]",
+        "hasOutputParser": true,
+        "messages": {
+          "messageValues": [
+            {
+              "message": "=[Redacted for the public showcase. The production prompt (~11k characters, Spanish) sets the assistant's role for the business, injects business hours, services and FAQs from the Negocios/Servicios tables, the conversation history and the channel, and instructs the model to answer ONLY in the JSON schema of the Structured Output Parser.]"
+            }
+          ]
+        },
+        "batching": {}
+      }
+    },
+    {
+      "id": "08b5c2a0-5aea-4dbf-ba5f-014ccb671ada",
+      "name": "Structured Output Parser",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        7616,
+        384
+      ],
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"categoria\": {\n      \"type\": \"string\",\n      \"enum\": [\"CITA\", \"CONSULTA\", \"QUEJA\", \"URGENTE\", \"NO_RELACIONADO\", \"PERSONA\"],\n      \"description\": \"Clasificación principal del mensaje entrante según la intención dominante del cliente.\"\n    },\n    \"idioma\": {\n      \"type\": \"string\",\n      \"enum\": [\"es\", \"en\"],\n      \"description\": \"Idioma en que escribe el cliente según la conversación: es (español) o en (inglés). Cualquier otro idioma cuenta como en.\"\n    },\n    \"respuesta_cliente\": {\n      \"type\": \"string\",\n      \"minLength\": 10,\n      \"maxLength\": 500,\n      \"description\": \"Respuesta lista para enviarse tal cual al cliente, en su idioma. Debe tener contenido real y natural, nunca vacía ni genérica.\"\n    },\n    \"pregunta_para_negocio\": {\n      \"type\": \"string\",\n      \"description\": \"Pregunta del cliente sobre el negocio cuya respuesta no aparece en la información del negocio, breve y en español, para avisarle al dueño. Cadena vacía si se pudo contestar, si no hay pregunta, o si es sobre disponibilidad para una cita.\"\n    }\n  },\n  \"required\": [\"categoria\", \"idioma\", \"respuesta_cliente\", \"pregunta_para_negocio\"],\n  \"additionalProperties\": false\n}"
+      }
+    },
+    {
+      "id": "c6716318-09e0-4039-8a3c-121ce8101ad1",
+      "name": "Enrutar por Categoría",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        8064,
+        0
+      ],
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "c83f2575-aefe-4558-8650-6b7b2d2a26a1",
+                    "leftValue": "={{ $json.output.categoria === 'CITA' || (['messenger', 'instagram', 'web'].includes($('Normalizar Entrada').item.json.canal) && /^[\\s\\d+().-]+$/.test(String($('Juntar Mensajes').item.json.mensaje || '').trim()) && String($('Juntar Mensajes').item.json.mensaje || '').replace(/\\D/g, '').length >= 7) }}",
+                    "operator": {
+                      "operation": "true",
+                      "singleValue": true,
+                      "type": "boolean"
+                    },
+                    "rightValue": ""
+                  }
+                ],
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                }
+              },
+              "renameOutput": true,
+              "outputKey": "CITA"
+            },
+            {
+              "conditions": {
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "cabf6f31-64d5-4ba0-9708-f8aea2daf503",
+                    "leftValue": "={{ $json.output.categoria === 'CONSULTA' || ($('Normalizar Entrada').item.json.canal === 'web' && ['QUEJA', 'URGENTE', 'PERSONA'].includes($json.output.categoria)) }}",
+                    "operator": {
+                      "operation": "true",
+                      "singleValue": true,
+                      "type": "boolean"
+                    },
+                    "rightValue": ""
+                  }
+                ],
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                }
+              },
+              "renameOutput": true,
+              "outputKey": "CONSULTA"
+            },
+            {
+              "conditions": {
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "332d86b3-9b84-421e-830a-b0a669c751d5",
+                    "leftValue": "={{ $json.output.categoria }}",
+                    "operator": {
+                      "operation": "equals",
+                      "type": "string"
+                    },
+                    "rightValue": "QUEJA"
+                  }
+                ],
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                }
+              },
+              "renameOutput": true,
+              "outputKey": "QUEJA"
+            },
+            {
+              "conditions": {
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "c7dc455f-488a-4929-9960-0e50954841ba",
+                    "leftValue": "={{ $json.output.categoria }}",
+                    "operator": {
+                      "operation": "equals",
+                      "type": "string"
+                    },
+                    "rightValue": "URGENTE"
+                  }
+                ],
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                }
+              },
+              "renameOutput": true,
+              "outputKey": "URGENTE"
+            },
+            {
+              "conditions": {
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "0a913465-b19c-404f-8b87-273bfd48f426",
+                    "leftValue": "={{ $json.output.categoria }}",
+                    "operator": {
+                      "operation": "equals",
+                      "type": "string"
+                    },
+                    "rightValue": "NO_RELACIONADO"
+                  }
+                ],
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                }
+              },
+              "renameOutput": true,
+              "outputKey": "NO_RELACIONADO"
+            },
+            {
+              "conditions": {
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "jj000003-0000-4000-8000-000000000001",
+                    "leftValue": "={{ $json.output.categoria }}",
+                    "operator": {
+                      "operation": "equals",
+                      "type": "string"
+                    },
+                    "rightValue": "PERSONA"
+                  }
+                ],
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                }
+              },
+              "renameOutput": true,
+              "outputKey": "PERSONA"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      }
+    },
+    {
+      "id": "cf73e638-cf35-4760-bf78-6708b1345a85",
+      "name": "Preparar Respuesta Final",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        8736,
+        192
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "f646dee3-9824-42cc-a36c-a25b9ef3e1e3",
+              "name": "respuesta_cliente",
+              "value": "={{ $('Clasificar Mensaje').item.json.output.respuesta_cliente }}",
+              "type": "string"
+            },
+            {
+              "id": "c4658164-a324-456e-a0b7-757c2593bee2",
+              "name": "telefono",
+              "value": "={{ $('Normalizar Entrada').item.json.telefono }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "a33a3005-f055-4e7f-b61a-0ca78a0845ba",
+      "name": "Auto-fixing Output Parser",
+      "type": "@n8n/n8n-nodes-langchain.outputParserAutofixing",
+      "typeVersion": 1,
+      "position": [
+        7392,
+        192
+      ],
+      "parameters": {
+        "options": {}
+      }
+    },
+    {
+      "id": "15cf00a3-806e-4079-a649-5d94c9da3137",
+      "name": "Anthropic Chat Model1",
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.6,
+      "position": [
+        7392,
+        384
+      ],
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "claude-haiku-4-5-20251001"
+        },
+        "options": {
+          "temperature": 0.1
+        }
+      }
+    },
+    {
+      "id": "1f529a59-eaea-4063-8e86-39997557a9ad",
+      "name": "Agendar Cita",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        8736,
+        0
+      ],
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "YOUR_BOOKING_WORKFLOW_ID"
+        },
+        "workflowInputs": {
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true,
+          "mappingMode": "defineBelow",
+          "matchingColumns": [],
+          "schema": [
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "telefono",
+              "id": "telefono",
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "mensaje",
+              "id": "mensaje",
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "contexto",
+              "id": "contexto",
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "idioma",
+              "id": "idioma",
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "cliente_id",
+              "id": "cliente_id",
+              "required": false,
+              "type": "string"
+            }
+          ],
+          "value": {
+            "cliente_id": "={{ $('Armar Configuración').first().json.cliente_id }}",
+            "contexto": "={{ ($('Leer Historial').item.json.messages || []).map(m => 'Cliente: ' + m.human + '\\nAsistente: ' + m.ai).join('\\n\\n') }}",
+            "idioma": "={{ $('Clasificar Mensaje').item.json.output.idioma || 'es' }}",
+            "mensaje": "={{ $('Juntar Mensajes').item.json.mensaje }}",
+            "telefono": "={{ $('Normalizar Entrada').item.json.telefono }}"
+          }
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "8bdad173-bb49-46e1-9552-ed9d26e966fd",
+      "name": "Avisar al Negocio",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        8512,
+        192
+      ],
+      "parameters": {
+        "sendTo": "={{ $('Armar Configuración').first().json.correo_avisos }}",
+        "subject": "=[{{ $('Armar Configuración').first().json.nombre }}] {{ $('Clasificar Mensaje').item.json.output.categoria }} — un cliente necesita atención",
+        "emailType": "text",
+        "message": "=[Email template trimmed for the public showcase: customer name, channel, phone, category, the AI summary and a link to reply.]",
+        "options": {}
+      }
+    },
+    {
+      "id": "d4ecd14d-8736-4b02-818a-cd381c767ffb",
+      "name": "Alertar Categoría Inesperada",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        8288,
+        384
+      ],
+      "parameters": {
+        "sendTo": "owner@example.com",
+        "subject": "[Lemus] Triage: categoría inesperada, el cliente quedó sin respuesta",
+        "emailType": "text",
+        "message": "=[Email template trimmed for the public showcase: customer name, channel, phone, category, the AI summary and a link to reply.]",
+        "options": {}
+      }
+    },
+    {
+      "id": "e11d5f8b-5d54-4fd3-8a42-7f3bdd944d43",
+      "name": "Mensaje de WhatsApp (YCloud)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "whatsapp-incoming",
+        "options": {}
+      }
+    },
+    {
+      "id": "e86d656b-72e7-4755-b397-3377b4250a77",
+      "name": "Normalizar Entrada",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        448,
+        0
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "ee000001-0000-4000-8000-000000000001",
+              "name": "telefono",
+              "type": "string",
+              "value": "={{ $json.remitente_id ? $json.canal + ':' + $json.remitente_id : ($json.chatInput ? $json.sessionId : $('Mensaje de WhatsApp (YCloud)').item.json.body.whatsappInboundMessage.from) }}"
+            },
+            {
+              "id": "ee000001-0000-4000-8000-000000000002",
+              "name": "mensaje",
+              "type": "string",
+              "value": "={{ $json.remitente_id ? ($json.texto || '') : ($json.chatInput ? $json.chatInput : (() => { const m = $('Mensaje de WhatsApp (YCloud)').item.json.body.whatsappInboundMessage; if (m.type === 'text') return m.text?.body || ''; const etiquetas = { image: '[FOTO]', video: '[VIDEO]', document: '[ARCHIVO]' }; if (etiquetas[m.type]) return (etiquetas[m.type] + ' ' + (m[m.type]?.caption || '')).trim(); return ''; })()) }}"
+            },
+            {
+              "id": "ee000001-0000-4000-8000-000000000003",
+              "name": "tipo",
+              "type": "string",
+              "value": "={{ $json.remitente_id ? ($json.tipo || 'text') : ($json.chatInput ? 'text' : $('Mensaje de WhatsApp (YCloud)').item.json.body.whatsappInboundMessage.type) }}"
+            },
+            {
+              "id": "ee000001-0000-4000-8000-000000000004",
+              "name": "canal",
+              "type": "string",
+              "value": "={{ $json.remitente_id ? $json.canal : ($json.chatInput ? 'chat' : 'whatsapp') }}"
+            },
+            {
+              "id": "ee000001-0000-4000-8000-000000000005",
+              "name": "nombre_perfil",
+              "type": "string",
+              "value": "={{ $json.remitente_id ? ($json.nombre_perfil || '') : ($json.chatInput ? '' : ($('Mensaje de WhatsApp (YCloud)').item.json.body.whatsappInboundMessage.customerProfile?.name || '')) }}"
+            },
+            {
+              "id": "ee000001-0000-4000-8000-000000000006",
+              "name": "numero_negocio",
+              "type": "string",
+              "value": "={{ $json.remitente_id ? ($json.page_id || '') : ($json.chatInput ? '' : ($('Mensaje de WhatsApp (YCloud)').item.json.body.whatsappInboundMessage.to || '')) }}"
+            },
+            {
+              "id": "ee000001-0000-4000-8000-000000000007",
+              "name": "recibido",
+              "type": "string",
+              "value": "={{ $now.toISO() }}"
+            },
+            {
+              "id": "ee000001-0000-4000-8000-000000000008",
+              "name": "meta_id",
+              "type": "string",
+              "value": "={{ $json.remitente_id || '' }}"
+            },
+            {
+              "id": "ee000001-0000-4000-8000-000000000009",
+              "name": "media_url",
+              "type": "string",
+              "value": "={{ $json.remitente_id ? ($json.media_url || '') : ($json.chatInput ? '' : ($('Mensaje de WhatsApp (YCloud)').item.json.body.whatsappInboundMessage.audio?.link || '')) }}"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "b620b940-ad8a-4e4c-b348-0e8e81cb1cc5",
+      "name": "Marcar Leído y Escribiendo",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2688,
+        -192
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.ycloud.com/v2/whatsapp/inboundMessages/{{ $('Mensaje de WhatsApp (YCloud)').item.json.body.whatsappInboundMessage.id }}/typing",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "ycloudApi",
+        "options": {}
+      }
+    },
+    {
+      "id": "226b519b-442a-48a6-9d70-0882996acfbc",
+      "name": "¿Se Puede Procesar?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2912,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "ee000002-0000-4000-8000-000000000001",
+              "leftValue": "={{ ['text', 'image', 'video', 'document', 'audio'].includes($('Normalizar Entrada').item.json.tipo) }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          }
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "efe7cf97-9f9c-4e2d-b84d-1021a45b92a5",
+      "name": "Respuesta - Solo Texto",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        8736,
+        576
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "ee000003-0000-4000-8000-000000000001",
+              "name": "telefono",
+              "type": "string",
+              "value": "={{ $('Normalizar Entrada').item.json.telefono }}"
+            },
+            {
+              "id": "ee000003-0000-4000-8000-000000000002",
+              "name": "respuesta_cliente",
+              "type": "string",
+              "value": "Por ahora no puedo ver ese tipo de mensaje. ¿Me lo puedes escribir?\n\nI can't open that kind of message yet. Could you type it instead?"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "ed9063d8-466e-4ce4-8191-a79044ec6313",
+      "name": "Respuesta - Fallo Triage",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        8736,
+        384
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "ee000004-0000-4000-8000-000000000001",
+              "name": "telefono",
+              "type": "string",
+              "value": "={{ $('Normalizar Entrada').item.json.telefono }}"
+            },
+            {
+              "id": "ee000004-0000-4000-8000-000000000002",
+              "name": "respuesta_cliente",
+              "type": "string",
+              "value": "={{ $('Clasificar Mensaje').item.json.output?.idioma === 'en' ? 'Sorry, I had trouble processing your message. Someone from our team will review it and get back to you shortly.' : 'Disculpa, tuve un problema para procesar tu mensaje. Alguien del negocio va a revisarlo y te contactará en breve.' }}"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "1a16d98b-18da-4ebd-9f1f-b8dacb7ad92b",
+      "name": "¿Responder por WhatsApp?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        10080,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "ee000005-0000-4000-8000-000000000001",
+              "leftValue": "={{ $('Normalizar Entrada').item.json.canal }}",
+              "operator": {
+                "operation": "equals",
+                "type": "string"
+              },
+              "rightValue": "whatsapp"
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          }
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "f11bac03-399a-41c7-8a10-f627741addf0",
+      "name": "Esperar un Momento",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        10304,
+        -192
+      ],
+      "parameters": {
+        "amount": "={{ Math.max(0, Math.ceil(Math.min(18, Math.max(2, ($('Consolidar Respuesta').item.json.respuesta_cliente || '').length / 15)) - ($now.toMillis() - DateTime.fromISO($('Normalizar Entrada').item.json.recibido || $now.toISO()).toMillis()) / 1000)) }}"
+      }
+    },
+    {
+      "id": "4851bcad-f48c-4a0a-aa40-dc1e4caacba5",
+      "name": "Enviar Respuesta",
+      "type": "@ycloud-ai/n8n-nodes-ycloud.ycloud",
+      "typeVersion": 1,
+      "position": [
+        10528,
+        -192
+      ],
+      "parameters": {
+        "resource": "message",
+        "from": "={{ $('Normalizar Entrada').item.json.numero_negocio }}",
+        "to": "={{ $('Consolidar Respuesta').item.json.telefono }}",
+        "body": "={{ $('Consolidar Respuesta').item.json.respuesta_cliente }}",
+        "requestOptions": {}
+      }
+    },
+    {
+      "id": "18185f04-687e-4d50-a95a-57819d95a104",
+      "name": "Leer Historial",
+      "type": "@n8n/n8n-nodes-langchain.memoryManager",
+      "typeVersion": 1.1,
+      "position": [
+        6720,
+        0
+      ],
+      "parameters": {
+        "options": {}
+      }
+    },
+    {
+      "id": "3a109d0e-9ae5-4020-8756-780a788fcd2c",
+      "name": "Memoria Triage - Leer",
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        6720,
+        192
+      ],
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "=triage-{{ $('Normalizar Entrada').item.json.telefono }}",
+        "contextWindowLength": 8
+      }
+    },
+    {
+      "id": "f1a590c7-6160-43c3-9151-ec806614df4f",
+      "name": "Consolidar Respuesta",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        8960,
+        0
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "ff000002-0000-4000-8000-000000000001",
+              "name": "telefono",
+              "type": "string",
+              "value": "={{ $('Normalizar Entrada').item.json.telefono }}"
+            },
+            {
+              "id": "ff000002-0000-4000-8000-000000000002",
+              "name": "respuesta_cliente",
+              "type": "string",
+              "value": "={{ $json.respuesta_cliente }}"
+            },
+            {
+              "id": "ff000002-0000-4000-8000-000000000003",
+              "name": "cita",
+              "type": "string",
+              "value": "={{ $json.cita || '' }}"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "c9a3250d-b20b-4733-9f33-64f5f55761d7",
+      "name": "Guardar en Historial",
+      "type": "@n8n/n8n-nodes-langchain.memoryManager",
+      "typeVersion": 1.1,
+      "position": [
+        9408,
+        0
+      ],
+      "parameters": {
+        "mode": "insert",
+        "messages": {
+          "messageValues": [
+            {
+              "type": "user",
+              "message": "={{ (() => { try { return $('Juntar Mensajes').item.json.mensaje } catch (e) { return '' } })() || $('Normalizar Entrada').item.json.mensaje || '(el cliente envió un ' + $('Normalizar Entrada').item.json.tipo + ', no un mensaje de texto)' }}",
+              "hideFromUI": true
+            },
+            {
+              "type": "ai",
+              "message": "={{ $json.respuesta_cliente }}",
+              "hideFromUI": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "27e407d9-c0b8-47e7-96e4-0ce3c325e86f",
+      "name": "Memoria Triage - Guardar",
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        9408,
+        192
+      ],
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "=triage-{{ $('Normalizar Entrada').item.json.telefono }}",
+        "contextWindowLength": 8
+      }
+    },
+    {
+      "id": "f5ee4f55-6bec-4ae1-9ddc-4c88e311d012",
+      "name": "Respuesta Lista",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        9632,
+        0
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "ff000003-0000-4000-8000-000000000001",
+              "name": "telefono",
+              "type": "string",
+              "value": "={{ $('Consolidar Respuesta').item.json.telefono }}"
+            },
+            {
+              "id": "ff000003-0000-4000-8000-000000000002",
+              "name": "respuesta_cliente",
+              "type": "string",
+              "value": "={{ $('Consolidar Respuesta').item.json.respuesta_cliente }}"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "0cee852f-b5e9-4f5d-8cad-226a9fe78a25",
+      "name": "Buscar Atención Humana",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1792,
+        0
+      ],
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "YOUR_ATENCION_HUMANA_DEMO_TABLE_ID"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "telefono",
+              "keyValue": "={{ $('Normalizar Entrada').item.json.telefono }}"
+            },
+            {
+              "keyName": "hasta",
+              "condition": "gt",
+              "keyValue": "={{ $now.toISO() }}"
+            }
+          ]
+        },
+        "limit": 1
+      }
+    },
+    {
+      "id": "9a30328a-b6bb-4d27-b711-15f4cf649ba9",
+      "name": "¿Lo Atiende una Persona?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2016,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "jj000001-0000-4000-8000-000000000001",
+              "leftValue": "={{ !!$json.id }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          }
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "849f159d-3438-49d3-8841-cb035ebcaeaf",
+      "name": "Bot en Pausa",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        2240,
+        -192
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "01d9f7e6-5233-41da-bab6-dc18cc895685",
+      "name": "¿Viene de WhatsApp?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2464,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "jj000002-0000-4000-8000-000000000001",
+              "leftValue": "={{ $('Normalizar Entrada').item.json.canal }}",
+              "operator": {
+                "operation": "equals",
+                "type": "string"
+              },
+              "rightValue": "whatsapp"
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          }
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "22b3a3a8-a1c8-4f40-91bd-9d8a98e02813",
+      "name": "Registrar Atención Humana",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        8288,
+        192
+      ],
+      "parameters": {
+        "operation": "upsert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "YOUR_ATENCION_HUMANA_DEMO_TABLE_ID"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "telefono",
+              "keyValue": "={{ $('Normalizar Entrada').item.json.telefono }}"
+            }
+          ]
+        },
+        "columns": {
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false,
+          "mappingMode": "defineBelow",
+          "matchingColumns": [],
+          "schema": [
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "telefono",
+              "id": "telefono",
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "hasta",
+              "id": "hasta",
+              "required": false,
+              "type": "dateTime"
+            },
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "motivo",
+              "id": "motivo",
+              "required": false,
+              "type": "string"
+            }
+          ],
+          "value": {
+            "hasta": "={{ $now.plus({ hours: $('Armar Configuración').first().json.horas_pausa }).toISO() }}",
+            "motivo": "={{ $json.output.categoria }}",
+            "telefono": "={{ $('Normalizar Entrada').item.json.telefono }}"
+          }
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "8278f4ab-35f3-4cf6-a99d-9d9ae659fcf9",
+      "name": "Guardar Mensaje Pendiente",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        4928,
+        0
+      ],
+      "parameters": {
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "YOUR_MENSAJES_PENDIENTES_DEMO_TABLE_ID"
+        },
+        "columns": {
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false,
+          "mappingMode": "defineBelow",
+          "matchingColumns": [],
+          "schema": [
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "telefono",
+              "id": "telefono",
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "mensaje",
+              "id": "mensaje",
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "recibido",
+              "id": "recibido",
+              "required": false,
+              "type": "string"
+            }
+          ],
+          "value": {
+            "mensaje": "={{ (() => { if ($('Normalizar Entrada').item.json.tipo !== 'audio') return $('Normalizar Entrada').item.json.mensaje; let t = ''; try { t = String($('Transcribir Nota de Voz').item.json.text || '').trim(); } catch (e) {} return t ? '[NOTA DE VOZ] ' + t : '[NOTA DE VOZ NO ENTENDIDA]'; })() }}",
+            "recibido": "={{ $('Normalizar Entrada').item.json.recibido }}",
+            "telefono": "={{ $('Normalizar Entrada').item.json.telefono }}"
+          }
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "465c3eb2-f674-472e-9596-2dbff5cd035f",
+      "name": "Esperar a que Termine de Escribir",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        5152,
+        0
+      ],
+      "parameters": {
+        "amount": "={{ $('Normalizar Entrada').item.json.canal === 'web' ? 1 : 12 }}"
+      }
+    },
+    {
+      "id": "99690afa-20d0-4f5b-90b3-4417d5722f2f",
+      "name": "Buscar Mensajes Pendientes",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        5376,
+        0
+      ],
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "YOUR_MENSAJES_PENDIENTES_DEMO_TABLE_ID"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "telefono",
+              "keyValue": "={{ $('Normalizar Entrada').item.json.telefono }}"
+            }
+          ]
+        },
+        "returnAll": true,
+        "orderBy": true,
+        "orderByColumn": "id",
+        "orderByDirection": "ASC"
+      }
+    },
+    {
+      "id": "097f1ab6-b01e-4257-bf27-0f6cbeb166fc",
+      "name": "Juntar Mensajes",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5600,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// Solo el último mensaje de una ráfaga responde; los anteriores se retiran.\n// Responde el último que se GUARDÓ (id más alto), pero los mensajes se juntan en el orden\n// en que LLEGARON: una nota de voz tarda unos segundos en transcribirse y puede guardarse\n// después de un texto que el cliente mandó más tarde.\nconst miId = $('Guardar Mensaje Pendiente').first().json.id;\nconst filas = $input.all()\n  .map(i => i.json)\n  .filter(r => r && r.id != null)\n  .sort((a, b) => a.id - b.id);\nconst ultimo = filas.length ? filas[filas.length - 1].id : null;\nconst esElUltimo = ultimo === miId;\nconst enOrden = [...filas].sort((a, b) =>\n  String(a.recibido || '').localeCompare(String(b.recibido || '')) || a.id - b.id);\n\nreturn [{\n  json: {\n    es_el_ultimo: esElUltimo,\n    mensaje: esElUltimo ? enOrden.map(r => r.mensaje).join('\\n') : '',\n    hasta_id: esElUltimo ? ultimo : null,\n    cantidad: filas.length,\n  },\n  pairedItem: { item: 0 },\n}];\n"
+      }
+    },
+    {
+      "id": "e3536273-50e4-43c9-9fc8-8d036105af00",
+      "name": "¿Es el Último Mensaje?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        5824,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "mm000001-0000-4000-8000-000000000001",
+              "leftValue": "={{ $json.es_el_ultimo }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          }
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "2e6466ce-d47e-448b-b0a7-b76d1aa2e1b0",
+      "name": "Lo Responde Otro Mensaje",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        6048,
+        192
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "637e3f6c-b3f8-45a5-9a7d-eb4d5b903355",
+      "name": "Borrar Mensajes Juntados",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        6048,
+        0
+      ],
+      "parameters": {
+        "operation": "deleteRows",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "YOUR_MENSAJES_PENDIENTES_DEMO_TABLE_ID"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "telefono",
+              "keyValue": "={{ $('Normalizar Entrada').item.json.telefono }}"
+            },
+            {
+              "condition": "lte",
+              "keyValue": "={{ $json.hasta_id }}"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "9cd6e253-93be-4803-a1ae-f90970528c58",
+      "name": "Quedarse con Uno",
+      "type": "n8n-nodes-base.limit",
+      "typeVersion": 1,
+      "position": [
+        6272,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "f3595778-ff23-4c7d-ad66-8833e0545fc8",
+      "name": "¿Es para Este Negocio?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1568,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "qq000001-0000-4000-8000-000000000001",
+              "leftValue": "={{ (() => { const e = $('Normalizar Entrada').item.json; const c = $('Armar Configuración').first().json; if (e.canal === 'chat' || e.canal === 'web') return true; if (e.canal === 'whatsapp') return e.numero_negocio === c.telefono_whatsapp; if (e.canal === 'messenger') return !!c.facebook_page_id && e.numero_negocio === String(c.facebook_page_id); return false; })() }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          }
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "085386b6-76f9-4eb1-a091-879dcd9dc8fc",
+      "name": "Mensaje para Otro Número",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1792,
+        192
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "6d0c5617-72c1-4778-b30b-02b5fea8c673",
+      "name": "Cargar Negocio",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        672,
+        0
+      ],
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "YOUR_NEGOCIOS_TABLE_ID"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "cliente_id",
+              "keyValue": "demo-clinic"
+            }
+          ]
+        },
+        "limit": 1
+      }
+    },
+    {
+      "id": "74eac044-4ab2-402f-bbde-ef57d5d3bbd9",
+      "name": "Cargar Servicios",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        896,
+        0
+      ],
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "YOUR_SERVICIOS_TABLE_ID"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "cliente_id",
+              "keyValue": "={{ $('Cargar Negocio').first().json.cliente_id || '' }}"
+            }
+          ]
+        },
+        "returnAll": true,
+        "orderBy": true,
+        "orderByColumn": "id",
+        "orderByDirection": "ASC"
+      }
+    },
+    {
+      "id": "87041b16-cfd6-4b6b-b7ba-69fa54f06f46",
+      "name": "Armar Configuración",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// Junta los datos del negocio y su catálogo en un solo objeto, y revisa que no falte nada.\nconst n = $('Cargar Negocio').first().json || {};\nconst servicios = $input.all()\n  .map(i => i.json)\n  .filter(s => s && s.nombre_es && s.activo !== false);\n\nconst faltan = [];\nif (!n.cliente_id) {\n  faltan.push('la fila del negocio en la tabla Negocios');\n} else {\n  for (const campo of ['nombre', 'tipo_negocio', 'telefono_whatsapp', 'correo_avisos', 'zona_horaria', 'horario_texto_es', 'horario_texto_en']) {\n    if (!n[campo]) faltan.push(campo);\n  }\n}\nif (!servicios.length) faltan.push('al menos un servicio activo en la tabla Servicios');\nif (faltan.length) {\n  throw new Error('Configuración incompleta del negocio: falta ' + faltan.join(', ') + '. Revisa las tablas Negocios y Servicios.');\n}\n\nconst catalogo = servicios\n  .map(s => {\n    const nombre = s.nombre_en && s.nombre_en !== s.nombre_es ? `${s.nombre_es} / ${s.nombre_en}` : s.nombre_es;\n    return `${nombre} ($${s.precio})`;\n  })\n  .join(', ');\n\nreturn [{\n  json: {\n    ...n,\n    horas_pausa: Number(n.horas_pausa) || 4,\n    palabra_reactivar: n.palabra_reactivar || '🤖',\n    servicios,\n    catalogo_texto: catalogo,\n  },\n  pairedItem: { item: 0 },\n}];\n"
+      }
+    },
+    {
+      "id": "bc6c7ac5-937e-4669-bbd2-7d6c5f42631f",
+      "name": "Mensaje de Meta",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        192
+      ],
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "canal"
+            },
+            {
+              "name": "remitente_id"
+            },
+            {
+              "name": "page_id"
+            },
+            {
+              "name": "texto"
+            },
+            {
+              "name": "tipo"
+            },
+            {
+              "name": "nombre_perfil"
+            },
+            {
+              "name": "mid"
+            },
+            {
+              "name": "media_url"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "40e3eecc-e6c3-488f-80cb-721508bdc9bd",
+      "name": "¿Responder por Messenger?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        10304,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $('Normalizar Entrada').item.json.canal }}",
+              "operator": {
+                "operation": "equals",
+                "type": "string"
+              },
+              "rightValue": "messenger"
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          }
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "18eaf448-cd76-477f-910e-1366236d2b79",
+      "name": "Obtener Token de Página",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        10528,
+        0
+      ],
+      "parameters": {
+        "url": "https://graph.facebook.com/v23.0/me/accounts",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "fields",
+              "value": "id,access_token"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "c9601982-aca3-43bf-8330-e06e8aff36e1",
+      "name": "Mostrar Escribiendo",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        10752,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.facebook.com/v23.0/{{ $('Normalizar Entrada').item.json.numero_negocio }}/messages",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "access_token",
+              "value": "={{ ($('Obtener Token de Página').item.json.data || []).find(p => p.id === $('Normalizar Entrada').item.json.numero_negocio)?.access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ recipient: { id: $('Normalizar Entrada').item.json.meta_id }, sender_action: 'typing_on' }) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "47235a7f-00f1-4339-94cb-667b98d04808",
+      "name": "Esperar un Momento (Messenger)",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        10976,
+        0
+      ],
+      "parameters": {
+        "amount": "={{ Math.max(0, Math.ceil(Math.min(18, Math.max(2, ($('Consolidar Respuesta').item.json.respuesta_cliente || '').length / 15)) - ($now.toMillis() - DateTime.fromISO($('Normalizar Entrada').item.json.recibido || $now.toISO()).toMillis()) / 1000)) }}"
+      }
+    },
+    {
+      "id": "75b34381-5348-4c9b-8997-f4f8e7d74f04",
+      "name": "Enviar por Messenger",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        11200,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.facebook.com/v23.0/{{ $('Normalizar Entrada').item.json.numero_negocio }}/messages",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "access_token",
+              "value": "={{ ($('Obtener Token de Página').item.json.data || []).find(p => p.id === $('Normalizar Entrada').item.json.numero_negocio)?.access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ recipient: { id: $('Normalizar Entrada').item.json.meta_id }, messaging_type: 'RESPONSE', message: { text: $('Consolidar Respuesta').item.json.respuesta_cliente } }) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "16afbc6e-7c48-4a26-a5dc-88662f73bdc3",
+      "name": "¿Pregunta para el Negocio?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        10080,
+        576
+      ],
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "pn000001-0000-4000-8000-000000000001",
+              "leftValue": "={{ (() => { try { const o = $('Clasificar Mensaje').item.json.output || {}; return !!String(o.pregunta_para_negocio || '').trim() && !['QUEJA', 'URGENTE', 'PERSONA'].includes(o.categoria) && $('Normalizar Entrada').item.json.canal !== 'web'; } catch (e) { return false; } })() }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          }
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "15f115a2-6988-41f5-86f3-ef395d4a54c2",
+      "name": "Avisar Pregunta al Negocio",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        10304,
+        576
+      ],
+      "parameters": {
+        "sendTo": "={{ $('Armar Configuración').first().json.correo_avisos }}",
+        "subject": "=[{{ $('Armar Configuración').first().json.nombre }}] Pregunta de un cliente que el asistente no pudo contestar",
+        "emailType": "text",
+        "message": "=[Email template trimmed for the public showcase: customer name, channel, phone, category, the AI summary and a link to reply.]",
+        "options": {}
+      }
+    },
+    {
+      "id": "c24f7ff4-aa88-4c02-837d-c00eab9c842b",
+      "name": "¿Es Nota de Voz?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        3360,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "nv000001-0000-4000-8000-000000000001",
+              "leftValue": "={{ $('Normalizar Entrada').item.json.tipo }}",
+              "operator": {
+                "name": "filter.operator.equals",
+                "operation": "equals",
+                "type": "string"
+              },
+              "rightValue": "audio"
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          }
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "33ab00dc-6cb8-474e-8e51-7adeb6da5688",
+      "name": "¿Audio de WhatsApp?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        3808,
+        -192
+      ],
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "nv000002-0000-4000-8000-000000000001",
+              "leftValue": "={{ $('Normalizar Entrada').item.json.canal }}",
+              "operator": {
+                "name": "filter.operator.equals",
+                "operation": "equals",
+                "type": "string"
+              },
+              "rightValue": "whatsapp"
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          }
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "8bd5fa19-e35a-4554-8204-a71121e7de1b",
+      "name": "Descargar Audio (WhatsApp)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        4032,
+        -192
+      ],
+      "parameters": {
+        "url": "={{ $('Normalizar Entrada').item.json.media_url }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "ycloudApi",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          },
+          "timeout": 20000
+        }
+      }
+    },
+    {
+      "id": "06d42720-742d-4573-a3a8-63c6b01186e9",
+      "name": "Descargar Audio (Messenger)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        4032,
+        -384
+      ],
+      "parameters": {
+        "url": "={{ $('Normalizar Entrada').item.json.media_url }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          },
+          "timeout": 20000
+        }
+      }
+    },
+    {
+      "id": "c0c600a7-48d7-4b8c-b686-174e4fde4c00",
+      "name": "Preparar Audio",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4256,
+        -192
+      ],
+      "parameters": {
+        "jsCode": "// Groq reconoce el formato por la extensión del archivo, y WhatsApp o Messenger no siempre la traen.\n// Si la descarga falló, sigue sin audio: la transcripción también fallará y el cliente\n// recibirá \"No alcancé a escuchar bien tu nota de voz\".\nconst item = $input.first();\nconst bin = item.binary && item.binary.data;\nif (!bin) return [{ json: { sin_audio: true }, pairedItem: { item: 0 } }];\n\nconst mime = String(bin.mimeType || '').toLowerCase();\nlet ext = bin.fileExtension || 'ogg';\nif (mime.includes('ogg') || mime.includes('opus')) ext = 'ogg';\nelse if (mime.includes('mpeg') || mime.includes('mp3')) ext = 'mp3';\nelse if (mime.includes('mp4')) ext = 'mp4';\nelse if (mime.includes('aac') || mime.includes('m4a')) ext = 'm4a';\nelse if (mime.includes('wav')) ext = 'wav';\nelse if (mime.includes('webm')) ext = 'webm';\n\nbin.fileName = 'nota-de-voz.' + ext;\nbin.fileExtension = ext;\nreturn [{ json: { formato: ext }, binary: { data: bin }, pairedItem: { item: 0 } }];\n"
+      }
+    },
+    {
+      "id": "e4e84f75-a42e-4abc-bf64-ad27c83bd3ca",
+      "name": "Transcribir Nota de Voz",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        4480,
+        -192
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/audio/transcriptions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formBinaryData",
+              "name": "file",
+              "inputDataFieldName": "data"
+            },
+            {
+              "name": "model",
+              "value": "whisper-large-v3-turbo"
+            },
+            {
+              "name": "response_format",
+              "value": "json"
+            },
+            {
+              "name": "temperature",
+              "value": "0"
+            },
+            {
+              "name": "prompt",
+              "value": "={{ ('Nota de voz de un cliente a ' + $('Armar Configuración').first().json.nombre + ', un negocio de ' + $('Armar Configuración').first().json.tipo_negocio + '. Servicios: ' + ($('Armar Configuración').first().json.servicios || []).map(s => s.nombre_es).join(', ') + '.').slice(0, 600) }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      }
+    },
+    {
+      "id": "39f26b97-e85b-4812-8d8a-409a1df71461",
+      "name": "¿Responder por Web?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        10528,
+        192
+      ],
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "wb000001-0000-4000-8000-000000000001",
+              "leftValue": "={{ $('Normalizar Entrada').item.json.canal }}",
+              "operator": {
+                "operation": "equals",
+                "type": "string"
+              },
+              "rightValue": "web"
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          }
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "a562205d-ee6a-4a54-b90c-388aaee679a4",
+      "name": "Guardar Respuesta Web",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        10752,
+        192
+      ],
+      "parameters": {
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "YOUR_RESPUESTAS_WEB_DEMO_TABLE_ID"
+        },
+        "columns": {
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false,
+          "mappingMode": "defineBelow",
+          "matchingColumns": [],
+          "schema": [
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "sesion",
+              "id": "sesion",
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "respuesta",
+              "id": "respuesta",
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "cita",
+              "id": "cita",
+              "required": false,
+              "type": "string"
+            }
+          ],
+          "value": {
+            "cita": "={{ $('Consolidar Respuesta').item.json.cita || '' }}",
+            "respuesta": "={{ $('Consolidar Respuesta').item.json.respuesta_cliente }}",
+            "sesion": "={{ $('Normalizar Entrada').item.json.telefono }}"
+          }
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "827cd1f5-5a63-417c-9b45-9a0c8754cb01",
+      "name": "Nota: Cómo funciona",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -1120
+      ],
+      "parameters": {
+        "width": 720,
+        "height": 640,
+        "content": "## Esmalte & Co. · Primera Respuesta · Triage\nDemo de clínica dental. Recibe cada mensaje del cliente, entiende qué quiere y le contesta por el mismo canal. Los datos del negocio (horario, servicios, precios, preguntas frecuentes) están en la ficha **<cliente_id>** de la tabla **Negocios**.\n\n**Entra por:** WhatsApp (YCloud) directo, Messenger e Instagram (desde *Entrada · Messenger e Instagram*) y el chat de lemusautomations.com (desde *Entrada · Chat lemusautomations.com*).\n\n**Recorrido, de izquierda a derecha:**\n1. **Configuración del Negocio:** carga la ficha y los servicios.\n2. **Filtros de Entrada:** descarta otro número, respeta la pausa humana y el horario del equipo (modo nocturno) y marca leído.\n3. **Nota de Voz:** si es audio, lo transcribe con Groq.\n4. **Juntar Mensajes Seguidos:** espera a que el cliente termine de escribir.\n5. **Historial y Clasificación:** la IA lee la conversación y elige una categoría.\n6. **Enrutar por Categoría:** agenda cita, pasa a una persona, responde o alerta.\n7. **Guardar Respuesta y Respuesta al Cliente:** guarda el historial y contesta.\n\n**Modo nocturno:** con `modo_bot = nocturno` en la ficha, en su horario el bot no contesta (lo hace el equipo) y fuera de horario sí. Solo aplica a WhatsApp, Messenger e Instagram.\n\n**Sale a:** *Agenda Llena · Citas* (de esta carpeta) y correo al dueño."
+      }
+    },
+    {
+      "id": "b05a0644-2dc4-4e02-8fb4-ae67fa3cf7fc",
+      "name": "¿Contesta el Equipo Ahora?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2240,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "nc000001-0000-4000-8000-000000000001",
+              "leftValue": "={{ (() => { const c = $('Armar Configuración').first().json; if (String(c.modo_bot || '').trim().toLowerCase() !== 'nocturno') return false; if (!['whatsapp', 'messenger', 'instagram'].includes($('Normalizar Entrada').item.json.canal)) return false; const ahora = $now.setZone(c.zona_horaria || 'America/Mexico_City'); const dia = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo'][ahora.weekday - 1]; const m = String(c['horario_' + dia] || '').trim().match(/^(\\d{1,2}):(\\d{2})\\s*-\\s*(\\d{1,2}):(\\d{2})$/); if (!m) return false; const min = ahora.hour * 60 + ahora.minute; return min >= Number(m[1]) * 60 + Number(m[2]) && min < Number(m[3]) * 60 + Number(m[4]); })() }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "version": 3,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          }
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "3ecd8ba6-7f2c-4886-b513-0b58100080ab",
+      "name": "Lo Contesta el Equipo",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        2464,
+        -192
+      ],
+      "parameters": {}
+    }
+  ],
+  "connections": {
+    "Anthropic Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Clasificar Mensaje",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enrutar por Categoría": {
+      "main": [
+        [
+          {
+            "node": "Agendar Cita",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Preparar Respuesta Final",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Registrar Atención Humana",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Registrar Atención Humana",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Preparar Respuesta Final",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Registrar Atención Humana",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Alertar Categoría Inesperada",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clasificar Mensaje": {
+      "main": [
+        [
+          {
+            "node": "Enrutar por Categoría",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Auto-fixing Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Clasificar Mensaje",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Auto-fixing Output Parser",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Anthropic Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Auto-fixing Output Parser",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Avisar al Negocio": {
+      "main": [
+        [
+          {
+            "node": "Preparar Respuesta Final",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When chat message received": {
+      "main": [
+        [
+          {
+            "node": "Normalizar Entrada",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Alertar Categoría Inesperada": {
+      "main": [
+        [
+          {
+            "node": "Respuesta - Fallo Triage",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Responder por WhatsApp?": {
+      "main": [
+        [
+          {
+            "node": "Esperar un Momento",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "¿Responder por Messenger?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Esperar un Momento": {
+      "main": [
+        [
+          {
+            "node": "Enviar Respuesta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Memoria Triage - Leer": {
+      "ai_memory": [
+        [
+          {
+            "node": "Leer Historial",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Leer Historial": {
+      "main": [
+        [
+          {
+            "node": "Clasificar Mensaje",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar Respuesta Final": {
+      "main": [
+        [
+          {
+            "node": "Consolidar Respuesta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agendar Cita": {
+      "main": [
+        [
+          {
+            "node": "Consolidar Respuesta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respuesta - Solo Texto": {
+      "main": [
+        [
+          {
+            "node": "Consolidar Respuesta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respuesta - Fallo Triage": {
+      "main": [
+        [
+          {
+            "node": "Consolidar Respuesta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Memoria Triage - Guardar": {
+      "ai_memory": [
+        [
+          {
+            "node": "Guardar en Historial",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consolidar Respuesta": {
+      "main": [
+        [
+          {
+            "node": "Guardar en Historial",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guardar en Historial": {
+      "main": [
+        [
+          {
+            "node": "Respuesta Lista",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respuesta Lista": {
+      "main": [
+        [
+          {
+            "node": "¿Responder por WhatsApp?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "¿Pregunta para el Negocio?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mensaje de WhatsApp (YCloud)": {
+      "main": [
+        [
+          {
+            "node": "Normalizar Entrada",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar Atención Humana": {
+      "main": [
+        [
+          {
+            "node": "¿Lo Atiende una Persona?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Lo Atiende una Persona?": {
+      "main": [
+        [
+          {
+            "node": "Bot en Pausa",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "¿Contesta el Equipo Ahora?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Viene de WhatsApp?": {
+      "main": [
+        [
+          {
+            "node": "Marcar Leído y Escribiendo",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "¿Se Puede Procesar?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Marcar Leído y Escribiendo": {
+      "main": [
+        [
+          {
+            "node": "¿Se Puede Procesar?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Registrar Atención Humana": {
+      "main": [
+        [
+          {
+            "node": "Avisar al Negocio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guardar Mensaje Pendiente": {
+      "main": [
+        [
+          {
+            "node": "Esperar a que Termine de Escribir",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Esperar a que Termine de Escribir": {
+      "main": [
+        [
+          {
+            "node": "Buscar Mensajes Pendientes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar Mensajes Pendientes": {
+      "main": [
+        [
+          {
+            "node": "Juntar Mensajes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Juntar Mensajes": {
+      "main": [
+        [
+          {
+            "node": "¿Es el Último Mensaje?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Es el Último Mensaje?": {
+      "main": [
+        [
+          {
+            "node": "Borrar Mensajes Juntados",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Lo Responde Otro Mensaje",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Borrar Mensajes Juntados": {
+      "main": [
+        [
+          {
+            "node": "Quedarse con Uno",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Quedarse con Uno": {
+      "main": [
+        [
+          {
+            "node": "Leer Historial",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Se Puede Procesar?": {
+      "main": [
+        [
+          {
+            "node": "¿Es Nota de Voz?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respuesta - Solo Texto",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Es para Este Negocio?": {
+      "main": [
+        [
+          {
+            "node": "Buscar Atención Humana",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mensaje para Otro Número",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cargar Negocio": {
+      "main": [
+        [
+          {
+            "node": "Cargar Servicios",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cargar Servicios": {
+      "main": [
+        [
+          {
+            "node": "Armar Configuración",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mensaje de Meta": {
+      "main": [
+        [
+          {
+            "node": "Normalizar Entrada",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Responder por Messenger?": {
+      "main": [
+        [
+          {
+            "node": "Obtener Token de Página",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "¿Responder por Web?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Obtener Token de Página": {
+      "main": [
+        [
+          {
+            "node": "Mostrar Escribiendo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mostrar Escribiendo": {
+      "main": [
+        [
+          {
+            "node": "Esperar un Momento (Messenger)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Esperar un Momento (Messenger)": {
+      "main": [
+        [
+          {
+            "node": "Enviar por Messenger",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Pregunta para el Negocio?": {
+      "main": [
+        [
+          {
+            "node": "Avisar Pregunta al Negocio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Es Nota de Voz?": {
+      "main": [
+        [
+          {
+            "node": "¿Audio de WhatsApp?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Guardar Mensaje Pendiente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Audio de WhatsApp?": {
+      "main": [
+        [
+          {
+            "node": "Descargar Audio (WhatsApp)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Descargar Audio (Messenger)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Descargar Audio (WhatsApp)": {
+      "main": [
+        [
+          {
+            "node": "Preparar Audio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Descargar Audio (Messenger)": {
+      "main": [
+        [
+          {
+            "node": "Preparar Audio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar Audio": {
+      "main": [
+        [
+          {
+            "node": "Transcribir Nota de Voz",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Transcribir Nota de Voz": {
+      "main": [
+        [
+          {
+            "node": "Guardar Mensaje Pendiente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Responder por Web?": {
+      "main": [
+        [
+          {
+            "node": "Guardar Respuesta Web",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalizar Entrada": {
+      "main": [
+        [
+          {
+            "node": "Cargar Negocio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Armar Configuración": {
+      "main": [
+        [
+          {
+            "node": "¿Es para Este Negocio?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Contesta el Equipo Ahora?": {
+      "main": [
+        [
+          {
+            "node": "Lo Contesta el Equipo",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "¿Viene de WhatsApp?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "nodeGroups": [
+    {
+      "id": "376a3e55-58ed-4d37-ac55-138e21572e80",
+      "name": "Configuración del Negocio",
+      "description": "Carga la ficha del negocio (tabla Negocios) y su catálogo de servicios (tabla Servicios).",
+      "nodeIds": [
+        "e86d656b-72e7-4755-b397-3377b4250a77",
+        "6d0c5617-72c1-4778-b30b-02b5fea8c673",
+        "74eac044-4ab2-402f-bbde-ef57d5d3bbd9",
+        "87041b16-cfd6-4b6b-b7ba-69fa54f06f46"
+      ]
+    },
+    {
+      "id": "e63ac865-63dd-48d1-b0da-ade00c74633b",
+      "name": "Filtros de Entrada",
+      "description": "Descarta otro número, respeta la pausa humana y el horario del equipo (modo nocturno) y marca leído.",
+      "nodeIds": [
+        "f3595778-ff23-4c7d-ad66-8833e0545fc8",
+        "085386b6-76f9-4eb1-a091-879dcd9dc8fc",
+        "0cee852f-b5e9-4f5d-8cad-226a9fe78a25",
+        "9a30328a-b6bb-4d27-b711-15f4cf649ba9",
+        "849f159d-3438-49d3-8841-cb035ebcaeaf",
+        "b05a0644-2dc4-4e02-8fb4-ae67fa3cf7fc",
+        "3ecd8ba6-7f2c-4886-b513-0b58100080ab",
+        "01d9f7e6-5233-41da-bab6-dc18cc895685",
+        "b620b940-ad8a-4e4c-b348-0e8e81cb1cc5",
+        "226b519b-442a-48a6-9d70-0882996acfbc"
+      ]
+    },
+    {
+      "id": "f3df8849-59f0-4e88-bfe0-145a6ad31df2",
+      "name": "Nota de Voz",
+      "description": "Descarga la nota de voz (WhatsApp o Messenger), le pone extensión y la transcribe con Groq.",
+      "nodeIds": [
+        "33ab00dc-6cb8-474e-8e51-7adeb6da5688",
+        "8bd5fa19-e35a-4554-8204-a71121e7de1b",
+        "06d42720-742d-4573-a3a8-63c6b01186e9",
+        "c0c600a7-48d7-4b8c-b686-174e4fde4c00",
+        "e4e84f75-a42e-4abc-bf64-ad27c83bd3ca"
+      ]
+    },
+    {
+      "id": "913411a9-13f3-4bea-8309-dcf62f55add9",
+      "name": "Juntar Mensajes Seguidos",
+      "nodeIds": [
+        "8278f4ab-35f3-4cf6-a99d-9d9ae659fcf9",
+        "465c3eb2-f674-472e-9596-2dbff5cd035f",
+        "99690afa-20d0-4f5b-90b3-4417d5722f2f",
+        "097f1ab6-b01e-4257-bf27-0f6cbeb166fc",
+        "e3536273-50e4-43c9-9fc8-8d036105af00",
+        "2e6466ce-d47e-448b-b0a7-b76d1aa2e1b0",
+        "637e3f6c-b3f8-45a5-9a7d-eb4d5b903355",
+        "9cd6e253-93be-4803-a1ae-f90970528c58"
+      ]
+    },
+    {
+      "id": "56e86c70-68f2-4cfa-9006-e6436f6b9a52",
+      "name": "Historial",
+      "nodeIds": [
+        "18185f04-687e-4d50-a95a-57819d95a104",
+        "3a109d0e-9ae5-4020-8756-780a788fcd2c"
+      ]
+    },
+    {
+      "id": "a2fcdd47-e50e-43b1-93f2-4efd742b7641",
+      "name": "Clasificación",
+      "nodeIds": [
+        "90a2cd61-dacb-468e-9f56-76e7d8f44a43",
+        "c556f9d9-7755-4e8e-8a0c-9c39a80e6cd3",
+        "a33a3005-f055-4e7f-b61a-0ca78a0845ba",
+        "15cf00a3-806e-4079-a649-5d94c9da3137",
+        "08b5c2a0-5aea-4dbf-ba5f-014ccb671ada"
+      ]
+    },
+    {
+      "id": "8b17db33-348f-482b-a0ef-e5cd5cf163bc",
+      "name": "Guardar Respuesta",
+      "nodeIds": [
+        "c9a3250d-b20b-4733-9f33-64f5f55761d7",
+        "27e407d9-c0b8-47e7-96e4-0ce3c325e86f",
+        "f5ee4f55-6bec-4ae1-9ddc-4c88e311d012"
+      ]
+    },
+    {
+      "id": "b644f6b0-5257-4715-8557-60673efd5355",
+      "name": "Respuesta al Cliente",
+      "nodeIds": [
+        "1a16d98b-18da-4ebd-9f1f-b8dacb7ad92b",
+        "f11bac03-399a-41c7-8a10-f627741addf0",
+        "4851bcad-f48c-4a0a-aa40-dc1e4caacba5",
+        "40e3eecc-e6c3-488f-80cb-721508bdc9bd",
+        "18eaf448-cd76-477f-910e-1366236d2b79",
+        "c9601982-aca3-43bf-8330-e06e8aff36e1",
+        "47235a7f-00f1-4339-94cb-667b98d04808",
+        "75b34381-5348-4c9b-8997-f4f8e7d74f04",
+        "39f26b97-e85b-4812-8d8a-409a1df71461",
+        "a562205d-ee6a-4a54-b90c-388aaee679a4"
+      ]
+    },
+    {
+      "id": "3a91e273-2000-40ad-9ad0-922f84268637",
+      "name": "Pregunta para el Negocio",
+      "description": "Si el cliente preguntó algo que el asistente no sabe, se le avisa al dueño por correo sin pausar el bot.",
+      "nodeIds": [
+        "16afbc6e-7c48-4a26-a5dc-88662f73bdc3",
+        "15f115a2-6988-41f5-86f3-ef395d4a54c2"
+      ]
+    }
+  ]
+}
