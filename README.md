@@ -27,12 +27,12 @@ flowchart LR
     E["Shared error alerts"]
     DT[("Data Tables<br/>Negocios · Servicios<br/>pending messages · handoff state")]
   end
-  T -- "CITA" --> B
-  T -- "QUEJA / URGENTE / PERSONA" --> OWN["Owner<br/>(email + pause bot)"]
+  T -->|"CITA"| B
+  T -->|"QUEJA / URGENTE / PERSONA"| OWN["Owner<br/>(email + pause bot)"]
   T <--> DT
   H <--> DT
-  T -. "on failure" .-> E
-  B -. "on failure" .-> E
+  T -.->|"on failure"| E
+  B -.->|"on failure"| E
 ```
 
 | Workflow | What it does |
